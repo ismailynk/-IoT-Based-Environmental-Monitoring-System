@@ -1,0 +1,158 @@
+//------style guard ----
+
+#ifdef __cplusplus
+
+extern "C" {
+
+#endif
+
+uint8_t temprature_sens_read();
+
+#ifdef __cplusplus
+
+}
+
+#endif
+
+uint8_t temprature_sens_read();
+
+// ------header files----
+
+#include <WiFi.h>
+
+#include "DHT.h"
+
+#include "ThingSpeak.h"
+
+//-------------------------
+#include <WiFiClientSecure.h>
+#include <UniversalTelegramBot.h>   
+#include <ArduinoJson.h>
+
+#define BOTtoken "5684057009:AAHWnGsga30fVfUFrRdKCwhqeHm1TXPI-34"  // Telegram bot tokenımız
+#define CHAT_ID "1415577699"
+
+WiFiClientSecure telclient;
+UniversalTelegramBot bot(BOTtoken, telclient);
+
+// saniye başı gelen mesaj varmı kontrol et.
+int botRequestDelay = 1000;
+unsigned long lastTimeBotRan;
+
+
+char* ssid = "ismail"; // SSID
+
+char* passphrase = "my234052"; //password
+
+WiFiServer server(80);
+
+WiFiClient client;
+
+//-----ThingSpeak channel detayları
+
+unsigned long myChannelNumber = 1;
+
+const char * myWriteAPIKey = "7VSJ43LSEX9TR8L3";
+
+//----- zamanlayıcı tanımlamaları
+
+unsigned long lastTime = 0;
+
+unsigned long timerDelay = 1000;
+
+//----DHT11 tanımlamaları
+
+#define DHTPIN 4 // 4. pine bağladık
+
+#define DHTTYPE DHT11 // nesneyi oluşturduk
+
+// nesne ile verinin geleceği pini ilişkilendirdik
+
+DHT dht(DHTPIN, DHTTYPE);
+
+void handleNewMessages(int numNewMessages) {
+  Serial.println("handleNewMessages");
+  Serial.println(String(numNewMessages));
+
+  for (int i=0; i<numNewMessages; i++) {
+    
+    String chat_id = String(bot.messages[i].chat_id);
+    /*if (false){
+      bot.sendMessage(chat_id, "Bilinmeyen Kullanıcı", "");
+      continue;
+    }*/
+    
+    // Mesajı yazdır
+    String text = bot.messages[i].text;
+    Serial.println(text);
+    Serial.print("Gönderen Kişi :" );
+    Serial.println(chat_id);
+  String msg;
+  int rnd;
+  String from_name = bot.messages[i].from_name;
+
+    String str = text.substring(4,6);
+      float tmp= str.toFloat();
+      str = text.substring(10, text.length());
+      float hum= str.toFloat();
+    
+    ThingSpeak.setField(1, tmp);//tmp 25 hum 25 Thingspeak diledlarını doldurma.
+
+ThingSpeak.setField(2, hum);
+
+int x = ThingSpeak.writeFields(myChannelNumber,myWriteAPIKey);//fieald yolla
+
+if(x == 200){
+
+Serial.println("Kanal Başarı ile Güncellendi.");
+
+}
+
+else{
+
+Serial.println("Kanal Güncellenirken hata Oluştu. HTTP hata kodu :  " + String(x));
+
+}
+    
+}
+}
+ 
+void setup()
+{
+
+Serial.begin(115200); 
+Serial.print("Wifiye Bağlanılıyor ");
+Serial.println(ssid);
+WiFi.mode(WIFI_STA);
+WiFi.begin(ssid, passphrase);
+telclient.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Telegram botununun bağlantısını sağlıyoruz
+ 
+while (WiFi.status() != WL_CONNECTED) {
+delay(500);
+Serial.print(".");
+}
+Serial.println("");
+Serial.println("WiFi bağlantısı kuruldu.");
+Serial.println("IP adresi: ");
+Serial.println(WiFi.localIP());
+server.begin();
+//----dht11i başltıyoruz
+dht.begin();
+ThingSpeak.begin(client); // ThingSpeak başlatılıyor
+}
+
+void loop()
+{
+
+if (millis() > lastTimeBotRan + botRequestDelay)  {
+    int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+
+    while(numNewMessages) {
+      Serial.println("Mesaj Alındı");
+      handleNewMessages(numNewMessages);
+      numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    }
+    lastTimeBotRan = millis();
+  }
+
+}
